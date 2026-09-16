@@ -2104,11 +2104,19 @@ function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Word-start matching: a query matches only at the start of a word, so
+// "gic" still won't match inside "logic" (no boundary there), but "snicker"
+// correctly matches "snickers" (query is a prefix of the word).
+function wordBoundaryRegex(q, flags) {
+  return new RegExp('\\b' + escapeRegex(q), flags || 'i');
+}
+
 // Pull a short window of text around the match so the person can see
 // where/how the term is used without opening the post and hitting Ctrl+F.
 function buildSnippetHtml(fullText, query) {
-  const idx = fullText.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return '';
+  const match = wordBoundaryRegex(query).exec(fullText);
+  if (!match) return '';
+  const idx = match.index;
 
   const contextChars = 100;
   const start = Math.max(0, idx - contextChars);
@@ -2116,7 +2124,7 @@ function buildSnippetHtml(fullText, query) {
   const raw = fullText.slice(start, end).replace(/\s+/g, ' ').trim();
 
   const escaped = escapeHtml(raw);
-  const re = new RegExp(escapeRegex(escapeHtml(query)), 'ig');
+  const re = wordBoundaryRegex(escapeHtml(query), 'ig');
   const highlighted = escaped.replace(re, m => `<mark>${m}</mark>`);
 
   const prefix = start > 0 ? '…' : '';
@@ -2132,10 +2140,11 @@ function matches(post, query, tag) {
   const baseText = [post.title, post.summary, ...(post.key_themes || [])].join(' ').toLowerCase();
   if (!q) return { pass: true, fullTextOnly: false };
 
-  const inBase = baseText.includes(q);
+  const re = wordBoundaryRegex(q);
+  const inBase = re.test(baseText);
   const cached = fullTextCache[post.id];
   const fullText = (cached && cached.ok) ? cached.text.toLowerCase() : '';
-  const inFull = !!fullText && fullText.includes(q);
+  const inFull = !!fullText && re.test(fullText);
 
   return { pass: inBase || inFull, fullTextOnly: !inBase && inFull };
 }
